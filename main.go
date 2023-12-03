@@ -10,8 +10,8 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/lionsoul2014/ip2region/binding/golang/xdb"
 	"github.com/openrdap/rdap"
-	"github.com/oschwald/geoip2-golang"
 	"github.com/spf13/pflag"
 )
 
@@ -26,9 +26,13 @@ var (
 
 var rdapClient = &rdap.Client{}
 
-//go:embed GeoLite2-City.mmdb
-var geolite2 []byte
-var geoReader *geoip2.Reader
+// //go:embed GeoLite2-City.mmdb
+// var geolite2 []byte
+// var geoReader *geoip2.Reader
+
+//go:embed ip2region.xdb
+var dbPath []byte
+var xdbSearcher *xdb.Searcher
 
 func main() {
 	pflag.Parse()
@@ -61,11 +65,18 @@ func main() {
 	}
 
 	var err error
-	geoReader, err = geoip2.FromBytes(geolite2)
+	// geoReader, err = geoip2.FromBytes(geolite2)
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// defer geoReader.Close()
+
+	xdbSearcher, err = xdb.NewWithBuffer(dbPath)
 	if err != nil {
 		panic(err)
 	}
-	defer geoReader.Close()
+
+	defer xdbSearcher.Close()
 
 	dest := pflagArgs[0]
 	args = append(args, dest)
@@ -136,23 +147,29 @@ func handleLine(line string) {
 			extra = append(extra, "["+registrant+"]")
 		}
 
+		// {
+		// 	var geo []string
+
+		// 	if city, err := geoReader.City(nodeIP); err == nil {
+		// 		if city.Country.Names["en"] != "" {
+		// 			geo = append(geo, city.Country.Names["en"])
+		// 		}
+		// 		if len(city.Subdivisions) > 0 {
+		// 			geo = append(geo, city.Subdivisions[0].Names["en"])
+		// 		}
+		// 		if city.City.Names["en"] != "" {
+		// 			geo = append(geo, city.City.Names["en"])
+		// 		}
+		// 	}
+		// 	extra = append(extra, "["+strings.Join(geo, ",")+"]")
+		// }
+
 		{
-			var geo []string
-
-			if city, err := geoReader.City(nodeIP); err == nil {
-				if city.Country.Names["en"] != "" {
-					geo = append(geo, city.Country.Names["en"])
-				}
-				if len(city.Subdivisions) > 0 {
-					geo = append(geo, city.Subdivisions[0].Names["en"])
-				}
-				if city.City.Names["en"] != "" {
-					geo = append(geo, city.City.Names["en"])
-				}
+			if record, err := xdbSearcher.SearchByStr(ip); err == nil {
+				// 国家|区域|省份|城市|ISP
+				extra = append(extra, "["+record+"]")
 			}
-			extra = append(extra, "["+strings.Join(geo, ",")+"]")
 		}
-
 	} else {
 		extra = append(extra, "private")
 	}
